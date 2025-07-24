@@ -1,0 +1,52 @@
+name: Push on Protected branches
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - dev
+      - develop
+      - release
+      - develop-b2b
+jobs:
+  check_changed_files:
+    runs-on: k8s-ci
+    outputs:
+      changed_files: ${{ steps.verify-changed.outputs.all_changed_files }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Changed files
+        uses: tj-actions/changed-files@v40
+        id: verify-changed
+  cxcommerce-scann:
+    needs: 
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'core-customize') && always()
+    uses: seidor-cx/github-actions/.github/workflows/cxcommerce_ci_sonar_scanner_branch.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/falconpack/falconpack-cxcommerce:0.3.0
+      WORKDIR: /opt/cxcommerce
+      CUSTOM_MODULES_DIR: core-customize/hybris/custom
+      SONAR_TOKEN: ${{ vars.SONAR_TOKEN }}
+      SONAR_URL: ${{ vars.SONAR_URL }}
+      SONAR_PROPERTIES_FILE: "external-resources/ci/sonar/sonar_cxcommerce.properties"
+      SOURCE_BRANCH_NAME: ${{ github.ref_name }}
+      MYSQL_DATABASE: "commerce"
+      MYSQL_USER: "commerce"
+      MYSQL_PASSWORD: "db-commerce-passwd"
+  storefront-scann:
+    needs:
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'js-storefront') && always()
+    uses: seidor-cx/github-actions/.github/workflows/storefront_ci_sonar_scanner_branch.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/node/18_20:latest
+      WORKDIR: js-storefront
+      SONAR_TOKEN: ${{ vars.SONAR_TOKEN }}
+      SONAR_URL: ${{ vars.SONAR_URL }}
+      SOURCE_BRANCH_NAME: ${{ github.ref_name }}
+      SONAR_PROPERTIES_FILE: "external-resources/ci/sonar/sonar_frontend.properties"

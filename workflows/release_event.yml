@@ -1,0 +1,23 @@
+name: Create Cloud environment tags
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  generate_D1_tag_environment:
+    uses: seidor-cx/falconpack/.github/workflows/create_cloud_tags.yml@develop-b2b
+    with:
+      environment: "d1"
+      wpa_home: "js-storefront/falconpack-spa"
+      wpa_home_b2b: "js-storefront/falconpackb2b-spa"
+  generate_S1_tag_environment:
+    uses: seidor-cx/falconpack/.github/workflows/create_cloud_tags.yml@dev
+    with:
+      environment: "s1"
+      wpa_home: "js-storefront/falconpack-spa"
+  generate_P1_tag_environment:
+    uses: seidor-cx/falconpack/.github/workflows/create_cloud_tags.yml@dev
+    with:
+      environment: "p1"
+      wpa_home: "js-storefront/falconpack-spa"

@@ -1,0 +1,59 @@
+name: Create tag Environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Define cloud environment name'
+        type: string
+        required: true
+      wpa_home:
+        description: 'Define storefront home path'
+        type: string
+        required: true
+      wpa_home_b2b:
+        description: 'Define storefront home path for falconb2bpack'
+        type: string
+        required: true
+
+jobs:
+  create_tag_environment:
+    runs-on: k8s-ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Config Git user
+        run: |
+          git config --global user.email "${{ github.actor.email }}@users.noreply.github.com"
+          git config --global user.name "${{ github.actor }}"
+      - name: Customize branch files
+        run: |
+          cp ${{ inputs.wpa_home }}/src/environments/environment.${{ inputs.environment }}.ts ${{ inputs.wpa_home }}/src/environments/environment.ts
+          cp ${{ inputs.wpa_home }}/src/environments/environment.${{ inputs.environment }}.ts ${{ inputs.wpa_home }}/src/environments/environment.prod.ts
+          cp ${{ inputs.wpa_home }}/src/index.${{ inputs.environment }}.html ${{ inputs.wpa_home }}/src/index.html
+          cp ${{ inputs.wpa_home }}/../manifest.${{ inputs.environment }}.json ${{ inputs.wpa_home }}/../manifest.json
+          cp ${{ inputs.wpa_home_b2b }}/src/environments/environment.${{ inputs.environment }}.ts ${{ inputs.wpa_home_b2b }}/src/environments/environment.ts
+          cp ${{ inputs.wpa_home_b2b }}/src/environments/environment.${{ inputs.environment }}.ts ${{ inputs.wpa_home_b2b }}/src/environments/environment.prod.ts
+          cp ${{ inputs.wpa_home_b2b }}/src/index.${{ inputs.environment }}.html ${{ inputs.wpa_home_b2b }}/src/index.html
+          cp ${{ inputs.wpa_home_b2b }}/../manifest.${{ inputs.environment }}.json ${{ inputs.wpa_home_b2b }}/../manifest.json
+          sed -i -e 's/ng build/ng build --configuration production/g' ${{ inputs.wpa_home }}/package.json
+          sed -i -e 's/ng build/ng build --configuration production/g' ${{ inputs.wpa_home_b2b }}/package.json
+      - name: Add changes
+        run: |
+          git add ${{ inputs.wpa_home }}/src/environments/environment.ts
+          git add ${{ inputs.wpa_home }}/src/environments/environment.prod.ts
+          git add ${{ inputs.wpa_home }}/src/index.html
+          git add ${{ inputs.wpa_home }}/../manifest.json
+          git add ${{ inputs.wpa_home }}/package.json
+          git add ${{ inputs.wpa_home_b2b }}/src/environments/environment.ts
+          git add ${{ inputs.wpa_home_b2b }}/src/environments/environment.prod.ts
+          git add ${{ inputs.wpa_home_b2b }}/src/index.html
+          git add ${{ inputs.wpa_home_b2b }}/../manifest.json
+          git add ${{ inputs.wpa_home_b2b }}/package.json
+      - name: Commit and push changes
+        run: |
+          git commit -m "Updated js-storefront environment files"
+          git tag -a "${GITHUB_REF_NAME}-${{ inputs.environment }}" -m "Published ${GITHUB_REF_NAME}-${{ inputs.environment }}"
+          git push origin --tags

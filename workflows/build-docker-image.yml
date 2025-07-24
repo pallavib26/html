@@ -1,0 +1,32 @@
+name: Build Docker cxcommerce
+on:
+  workflow_call:
+    inputs:
+      GIT_TOKEN:
+        type: string
+      PUSH:
+        type: boolean
+        default: false
+jobs:
+  build_docker_image:
+    uses: seidor-cx/github-actions/.github/workflows/docker_build.yml@main
+    if: inputs.PUSH == false
+    with:
+      CONTEXT: "external-resources/ci/docker"
+      IMAGE: "falconpack-cxcommerce"
+      BUILD_ARGS: |
+            GITHUB_USER="${{ github.actor }}""
+            NEXUS_PARAMS="${{ vars.NEXUS_DOWNLOAD_USER }}:${{ vars.NEXUS_DOWNLOAD_PASS }}"
+      SECRETS_ENV: github_token=${{ inputs.GIT_TOKEN }}
+    secrets: inherit
+  build_and_push_docker_image:
+    uses: seidor-cx/github-actions/.github/workflows/docker_build_and_push.yml@main
+    if: inputs.PUSH == true
+    with:
+      CONTEXT: "external-resources/ci/docker"
+      IMAGE: "falconpack-cxcommerce"
+      BUILD_ARGS: |
+            GITHUB_USER="${{ github.actor }}"
+            NEXUS_PARAMS="${{ vars.NEXUS_DOWNLOAD_USER }}:${{ vars.NEXUS_DOWNLOAD_PASS }}"
+      SECRETS_ENV: github_token=${{ inputs.GIT_TOKEN }}
+    secrets: inherit

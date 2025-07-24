@@ -1,0 +1,115 @@
+name: PR on Protected branches
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+      - dev
+      - develop
+      - release
+      - develop-b2b
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check_changed_files:
+    runs-on: k8s-ci
+    outputs:
+      changed_files: ${{ steps.verify-changed.outputs.all_changed_files }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Changed files
+        uses: tj-actions/changed-files@v40
+        id: verify-changed
+  build_docker_image:
+    needs: check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'external-resources/ci/docker')
+    uses: seidor-cx/falconpack/.github/workflows/build-docker-image.yml@dev
+    with:
+      GIT_TOKEN: ${{ vars.GIT_TOKEN }}
+      PUSH: true
+  pr-sonar-check:
+    needs: 
+      - build_docker_image
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'core-customize') && always()
+    uses: seidor-cx/github-actions/.github/workflows/cxcommerce_ci_sonar_scanner_pr.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/falconpack/falconpack-cxcommerce:0.3.0
+      WORKDIR: /opt/cxcommerce
+      CUSTOM_MODULES_DIR: core-customize/hybris/custom
+      SONAR_TOKEN: ${{ vars.SONAR_TOKEN }}
+      SONAR_URL: ${{ vars.SONAR_URL }}
+      SONAR_PROPERTIES_FILE: "external-resources/ci/sonar/sonar_cxcommerce.properties"
+      PR_IID: ${{ github.event.pull_request.number }}
+      SOURCE_BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+      TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+      MYSQL_DATABASE: "commerce"
+      MYSQL_USER: "commerce"
+      MYSQL_PASSWORD: "db-commerce-passwd"
+  pr-initialize-cxc:
+    needs: 
+      - build_docker_image
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, '.impex') || contains(needs.check_changed_files.outputs.changed_files, '-items.xml') && always() && contains(needs.check_changed_files.outputs.changed_files, 'core-customize')
+    uses: seidor-cx/github-actions/.github/workflows/cxcommerce_ci_build_simulating_merge.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/falconpack/falconpack-cxcommerce:0.3.0
+      WORKDIR: /opt/cxcommerce
+      CUSTOM_MODULES_DIR: core-customize/hybris/custom/falconpack
+      SOURCE_BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+      TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+      MYSQL_DATABASE: "commerce"
+      MYSQL_USER: "commerce"
+      MYSQL_PASSWORD: "db-commerce-passwd"
+      INITIALIZE: "1"
+  pr-build-storefront:
+    needs: 
+      - build_docker_image
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'js-storefront') && always()
+    uses: seidor-cx/github-actions/.github/workflows/storefront_ci_sonar_scanner_pr.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/node/18_20:latest
+      WORKDIR: js-storefront/falconpack-spa
+      SONAR_TOKEN: ${{ vars.SONAR_TOKEN }}
+      SONAR_URL: ${{ vars.SONAR_URL }}
+      SONAR_PROPERTIES_FILE: "external-resources/ci/sonar/sonar_frontend.properties"
+      PR_IID: ${{ github.event.pull_request.number }}
+      SOURCE_BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+      TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  pr-build-b2b-storefront:
+    needs: 
+      - build_docker_image
+      - check_changed_files
+    if: contains(needs.check_changed_files.outputs.changed_files, 'js-storefront') && always()
+    uses: seidor-cx/github-actions/.github/workflows/storefront_ci_sonar_scanner_pr.yml@main
+    with:
+      DOCKER_IMAGE: ghcr.io/seidor-cx/node/18_20:latest
+      WORKDIR: js-storefront/falconpackb2b-spa
+      SONAR_TOKEN: ${{ vars.SONAR_TOKEN }}
+      SONAR_URL: ${{ vars.SONAR_URL }}
+      SONAR_PROPERTIES_FILE: "external-resources/ci/sonar/sonar_frontend.properties"
+      PR_IID: ${{ github.event.pull_request.number }}
+      SOURCE_BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+      TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  pipeline-result:
+    needs: [pr-sonar-check, pr-initialize-cxc, pr-build-storefront, build_docker_image]
+    runs-on: k8s-ci
+    if: always()
+    steps:
+      - name: Check pipelines status
+        run: |
+          if [[ "${{ needs.pr-sonar-check.result }}" == "success" || "${{ needs.pr-sonar-check.result }}" == "skipped" ]] && \
+             [[ "${{ needs.pr-initialize-cxc.result }}" == "success" || "${{ needs.pr-initialize-cxc.result }}" == "skipped" ]] && \
+             [[ "${{ needs.build_docker_image.result }}" == "success" || "${{ needs.build_docker_image.result }}" == "skipped" ]] && \
+             [[ "${{ needs.pr-build-storefront.result }}" == "success" || "${{ needs.pr-build-storefront.result }}" == "skipped" ]] && \
+             [[ "${{ needs.pr-build-b2b-storefront.result }}" == "success" || "${{ needs.pr-build-b2b-storefront.result }}" == "skipped" ]]; then
+            echo "All jobs have been successfull or skipped"
+            exit 0
+          else
+            echo "One or more jobs have been failed"
+            exit 1
+          fi
